@@ -1,0 +1,16 @@
+<table class="table table-bordered table-striped">
+    <thead class="thead-dark">
+        <tr>
+            <th>Device Name</th>
+            <th>Manufacturer</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr *ngFor="let device of devices">
+            <td>{{device.name}}</td>
+            <td>
+                <a [routerLink]="['/manufacturers', device.manufacturerName]">{{device.manufacturerName}}</a>
+            </td>
+        </tr>
+    </tbody>
+</table>

@@ -1,0 +1,5 @@
+<ul>
+    <li *ngFor="let manufacturer of manufacturers">
+        <a [routerLink]="['/manufacturers', manufacturer.name]">{{manufacturer.name}}</a>
+    </li>
+</ul>
