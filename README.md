@@ -345,6 +345,25 @@ $ docker push csgdockertraining.azurecr.io/lab1/mssql-server-linux:2017-CU4
 
 ```
 
+### `docker network create <network-name>`
+
+Create a network for Docker container communication.
+
+## Create `csglab` Network
+
+Let's first create a network for our stack.
+
+```bash
+$ docker network create -d bridge \
+   --opt "com.docker.network.bridge.host_binding_ipv4"="0.0.0.0" \
+   --opt "com.docker.network.bridge.enable_ip_masquerade"="true" \
+   csglab
+
+46894baa67db8e8524934d28a047527ee02cea4c49e7fc510cd9664f5a9a62cf
+```
+
+The hash that is returned is the ID of the network within Docker.
+
 ## Run SQL Server for Linux
 
 We will use the official [SQL Server for Linux](https://hub.docker.com/r/microsoft/mssql-server-linux/s) Developer Edition 2017-CU6 Docker image for this demo.
@@ -355,12 +374,13 @@ Replace the `yourStrongPassword` placeholder with a custom password. Please jot 
 
 The back slash "`\`" can be ignored or typed in, as this tells Bash that the command continues on the next line when you hit the Enter/Return key.
 
-Also important to note is the `--name` we're supplying. This will become crucial when writing the database connection to be used by the ASP.NET Core application later. We're using `csglab-mssql` to represent MS SQL's container name in this lab.
+Also important to note is the `--name` we're supplying and the fact we're associating this instance with the `csglab` network. This will become crucial when writing the database connection to be used by the ASP.NET Core application later. We're using `csglab-mssql` to represent MS SQL's container name in this lab.
 
 ```bash
 $ docker run \
    -e 'ACCEPT_EULA=Y' \
    -e 'SA_PASSWORD=yourStrongPassword' \
+   --network csglab
    -p 1433:1433 -d \
    --name csglab-mssql \
    microsoft/mssql-server-linux:2017-CU6
@@ -379,7 +399,7 @@ d057e89d8e94: Pull complete
 1ed0a0d4098f: Pull complete 
 Digest: sha256:30ff80f9765b3c813af6b4ed71355dd4abb8afc966226fc80c12a8ff1b2c4ef8
 Status: Downloaded newer image for microsoft/mssql-server-linux:2017-CU6
-48f877fc6113dfe6d64224bfeec536ad10765383c2342d0787988347138b4827
+2bca7ee4391b9f7e7e19893d5404376b3e65422e5542bf1ede171586fcc12c29
 ```
 
 Let's try connecting to SQL Server now.
@@ -408,5 +428,187 @@ msdb
 
 Press `Ctrl + C` or enter `exit` to exit the SQLCMD interface.
 
+Congratulations! You now have an instance of SQL Server running in a Docker container!
+
 For additional details on the MS SQL Server for Linux image, [visit the official repository](https://hub.docker.com/r/microsoft/mssql-server-linux/).
+
+## Dockerize the `Cardinal.DockerLabs.Web` ASP.NET Core application
+
+If you haven't examined the source code for the sample ASP.NET Core app, do so now if you'd like.
+
+Open the application's source code in Visual Studio Code.
+
+```bash
+$ cd ~/repos/csg-docker-lab/
+$
+$ code .
+```
+
+Examine the `Startup.cs` file under the `src/web/Cardinal.DockerLabs.Web` directory.
+
+### `ConfigureServices()` method
+
+Notice that the connection string is being read from an environment variable named `CSG_DOCKER_LAB_CONN_STRING`. The result of this variable is fed into the configuration for the Entity Framework Core `DbContext` named `SmartHomeDbContext`.
+
+Remember that this environment variable will be read from *within* the Docker container we will create later, not from the host machine.
+
+### `Configure()` method
+
+The last statement in this method seeds the database with initial custom data. This means that Entity Framework Core will automatically generate a new table within the SQL Server container we ran earlier.
+
+## `launchSettings.json` file
+
+Open the `launchSettings.json` file under the `csg-docker-lab/src/web/Cardinal.DockerLabs.Web/Properties` directory.
+
+Examine the custom launch profile for running this application within Docker. Observe that the this web application is exposed on host http://0.0.0.0:8000/. The IP "0.0.0.0" is used internally within the Docker container. The application is exposed on port 8000 *within the container*.
+
+Note that this is one way to run a .NET Core application within Docker. For example, the ASP.NET Core Visual Studio Template for Docker uses a much more complex Dockerfile configured to run in "stages". You will see an example of this when we configure the Dockerfile for the Angular client application.
+
+### Your first Dockerfile: ASP.NET Core App
+
+While still in Visual Studio Code, add a new file named `Dockerfile` to the directory root of the ASP.NET Core project (`csg-docker-lab/src/web`).
+
+We will use the official [microsoft/aspnetcore-build](https://hub.docker.com/r/microsoft/aspnetcore-build/) base image and use the tag (version) `2.0.8-2.1.200`, which means it supports versions 2.0.8 through 2.1.200 of .NET Core.
+
+In the Dockerfile shown below, the `-p` option used in the command `mkdir` indicates it should suppress errors if the directory `/app` already exists.
+
+Finally, after copying the source code over to the container, the standard set of operations for running a .NET Core application seem more familiar.
+
+Add the following set of Docker commands to the `Dockerfile`.
+
+```Dockerfile
+FROM microsoft/aspnetcore-build:2.0.8-2.1.200
+
+RUN mkdir -p /app
+WORKDIR /app
+
+COPY . .
+
+WORKDIR ./Cardinal.DockerLabs.Web
+RUN dotnet restore
+
+# TODO: Pass configuration via command-line argument
+RUN dotnet build -c Debug
+
+EXPOSE 8000
+
+CMD ["dotnet", "run", "--launch-profile", "Docker"]
+```
+
+Save the Dockerfile and return to the Terminal window. We assume the project root is located under the `~/repos/csg-docker-lab` directory.
+
+### Build the ASP.NET Core image
+
+Ensure you're in the `web` directory of the source code.
+```bash
+$ cd ~/repos/csg-docker-lab/src/web
+```
+
+Let's now build the image. Assign the name `csglab-web`. Again, please note the "`.`" at the very end of the command!
+
+``` bash
+$ docker build -t csglab-web .
+
+Sending build context to Docker daemon  1.561MB
+Step 1/11 : FROM microsoft/aspnetcore-build:2.0.8-2.1.200
+2.0.8-2.1.200: Pulling from microsoft/aspnetcore-build
+cc1a78bfd46b: Pull complete 
+... 8 more pulls later ...
+3f469dd64863: Pull complete 
+Digest: sha256:7a3afd1d1582622a848a9ba9e8ac02d3223b53fb3e8e2f093319e19a22a6396a
+
+... Holy cow! A lot more stuff happened! ...
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:07.99
+Removing intermediate container 4300586f2fd0
+ ---> 67b7c482e667
+Step 10/11 : EXPOSE 8080
+ ---> Running in a8b73d02ebb3
+Removing intermediate container a8b73d02ebb3
+ ---> 1501c87092a1
+Step 11/11 : CMD ["dotnet", "run", "--launch-profile", "Docker"]
+ ---> Running in 80bb738b50b9
+Removing intermediate container 80bb738b50b9
+ ---> 8111f3a92791
+Successfully built 8111f3a92791
+Successfully tagged csg-lab-web:latest
+```
+
+You should see no errors. None at all! It should just work!
+
+**Halt**: Note the very last above (`Successfully tagged csg-lab-web:latest`). Because we didn't assign a custom tag to this image, Docker assumes the "latest" tag is to be used. Let's confirm that.
+
+```bash
+$ docker images csglab-web
+
+REPOSITORY          TAG                 IMAGE ID            CREATED             SIZE
+csglab-web         latest              8111f3a92791        8 minutes ago       2.06GB
+```
+
+### Run `csg-lab-web` Docker image
+
+Let's now run the ASP.NET Core application to make sure everything is working from within the Docker container. But first we need to build the connection string.
+
+For the sake of simplicity, we're going to store the connection string in a local environment variable. Please note that we're only trying to shorten the length of the `docker run` command. Replace the `yourSQLPassword` placeholder with the MS SQL Server password you set up earlier. The `server` property in the connection string is pointing to `locahost`, which is the host machine running Docker. In situations where Docker containers are connected via a network or deployed via an orchestrator, such as Kubernetes, the container name would be used instead. This is very important, as it is a common mistake for Kubernetes and Docker newcomers.
+
+```bash
+$ CONN_STRING="Server=csglab-mssql,1433;Database=CsgLabSmartHome;User=sa;Password=yourSQLPassword"
+
+$ echo $CONN_STRING
+Server=csglab-mssql,1433;Database=CsgLabSmartHome;User=sa;Password=yourSQLPassword
+```
+
+We are now ready to run the ASP.NET Core App as a Docker container. Assign the name `csglab-web` to it.
+
+Observe how we're injecting the connection string into the container instance via the custom `CSG_DOCKER_LAB_CONN_STRING` argument we declared in the Dockerfile. In fact, you already used a similar syntax when you ran the MS SQL Server image earlier.
+
+```bash
+$ docker run -d -p 8000:8000 --network csglab --name csglab-web -e "CSG_DOCKER_LAB_CONN_STRING=$CONN_STRING" csglab-web
+
+627550b7848162c0b63bc26f603697bf075ca2e09795fad7ae3aee3472ec071f
+```
+
+Notice the container ID returned by Docker after executing `docker run`. Copy the ID that you see in your Terminal session and use it below. The container name `csglab-web` won't work if the container exited prematurely due to any runtime errors.
+
+Confirm that ASP.NET started successfully by examining the logs.
+
+```bash
+$ docker logs <container-id-returned-by-docker>
+
+Using launch settings from /app/Cardinal.DockerLabs.Web/Properties/launchSettings.json...
+warn: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[35]
+      No XML encryptor configured. Key {04c08954-cb6b-4d17-bfc7-15e7fbaf70dd} may be persisted to storage in unencrypted form.
+Hosting environment: Production
+Content root path: /app/Cardinal.DockerLabs.Web
+Now listening on: http://0.0.0.0:8000
+Application started. Press Ctrl+C to shut down.
+```
+
+If you see any unusual errors, such as a Stack Trace, confirm that the `docker run` command was correctly supplied and that the container was added to the `csglab` network. The most likely cause is that the connection string may be missing from the container. You can ignore the "XML encryptor" warning shown above and in your container's logs.
+
+In the example above, we can see that ASP.NET is running on port 8000 on host "0.0.0.0".
+
+Now verify the container is running.
+
+```bash
+$ docker ps
+
+CONTAINER ID        IMAGE                                   COMMAND                  CREATED             STATUS              PORTS                              NAMES
+627550b78481        csglab-web                              "dotnet run --launch…"   46 seconds ago      Up 45 seconds       0.0.0.0:8000->8000/tcp, 8080/tcp   csglab-web
+2bca7ee4391b        microsoft/mssql-server-linux:2017-CU6   "/opt/mssql/bin/sqls…"   9 minutes ago       Up 9 minutes        0.0.0.0:1433->1433/tcp             csglab-mssql
+```
+
+Finally, make your first request to confirm ASP.NET can communicate with SQL Server. If you saw the same log output as shown above, then seeding the SQL Server database was successful.
+
+```bash
+$ curl http://localhost:8000/api/manufacturers
+
+[{"id":1,"name":"Microsoft"},{"id":2,"name":"Apple"}]
+```
+
+Congratulations! ASP.NET Core is now communicating with SQL Server in Docker!
 
