@@ -193,7 +193,41 @@ $ <cursor here>
 
 Some containers, such as Alpine Linux, will immediately exit after executing. It is possible to enable interactive mode when you run a container by forcing a shell session. For example, `docker run -it alpine:3.7 sh` will pull the Alphine Linux 3.7 image and enable interactive mode via the Shell command.
 
+#### Examining output from container standard output
+
+Services running in Docker will output diagnostics (logs) to standard output. Logging to standard output is of the recommendations from the [Twelve Factor App](https://12factor.net/) guidelines and it is a typical path taken when Dockerizing existing apps. Let's examine Mongo's output. Note that what you see may be different.
+
+```bash
+$ docker logs mongo-db
+
+2018-05-08T21:17:14.377+0000 I CONTROL  [initandlisten] MongoDB starting : pid=1 port=27017 dbpath=/data/db 64-bit host=84200c4852cc
+2018-05-08T21:17:14.385+0000 I CONTROL  [initandlisten] db version v3.0.15
+2018-05-08T21:17:14.385+0000 I CONTROL  [initandlisten] git version: b8ff507269c382bc100fc52f75f48d54cd42ec3b
+2018-05-08T21:17:14.385+0000 I CONTROL  [initandlisten] build info: Linux ip-10-166-66-3 3.2.0-4-amd64 #1 SMP Debian 3.2.46-1 x86_64 BOOST_LIB_VERSION=1_49
+2018-05-08T21:17:14.385+0000 I CONTROL  [initandlisten] allocator: tcmalloc
+2018-05-08T21:17:14.385+0000 I CONTROL  [initandlisten] options: {}
+2018-05-08T21:17:14.401+0000 I JOURNAL  [initandlisten] journal dir=/data/db/journal
+2018-05-08T21:17:14.402+0000 I JOURNAL  [initandlisten] recover : no journal files present, no recovery needed
+2018-05-08T21:17:15.032+0000 I JOURNAL  [initandlisten] preallocateIsFaster=true 6.06
+2018-05-08T21:17:15.770+0000 I JOURNAL  [initandlisten] preallocateIsFaster=true 9.1
+2018-05-08T21:17:17.516+0000 I JOURNAL  [initandlisten] preallocateIsFaster=true 8.58
+2018-05-08T21:17:17.516+0000 I JOURNAL  [initandlisten] preallocateIsFaster check took 3.114 secs
+2018-05-08T21:17:17.516+0000 I JOURNAL  [initandlisten] preallocating a journal file /data/db/journal/prealloc.0
+2018-05-08T21:17:18.483+0000 I JOURNAL  [initandlisten] preallocating a journal file /data/db/journal/prealloc.1
+2018-05-08T21:17:19.326+0000 I JOURNAL  [initandlisten] preallocating a journal file /data/db/journal/prealloc.2
+2018-05-08T21:17:20.093+0000 I JOURNAL  [durability] Durability thread started
+2018-05-08T21:17:20.094+0000 I JOURNAL  [journal writer] Journal writer thread started
+2018-05-08T21:17:20.127+0000 I INDEX    [initandlisten] allocating new ns file /data/db/local.ns, filling with zeroes...
+2018-05-08T21:17:20.180+0000 I STORAGE  [FileAllocator] allocating new datafile /data/db/local.0, filling with zeroes...
+2018-05-08T21:17:20.180+0000 I STORAGE  [FileAllocator] creating directory /data/db/_tmp
+2018-05-08T21:17:20.195+0000 I STORAGE  [FileAllocator] done allocating datafile /data/db/local.0, size: 64MB,  took 0.003 secs
+2018-05-08T21:17:20.215+0000 I NETWORK  [initandlisten] waiting for connections on port 27017
+```
+
+The `-t` option tells the `docker logs` command to output timestamps. We know that `mongo-db` is the name of our MongoDB container instance. To show additional options, type `docker logs --help`. Feel free to experiment with those options.
+
 #### Stop a running container
+
 Let's stop the MongoDB container. Again, see the importance of using a well-known alias for the running instance of a container.
 
 ```bash
@@ -208,6 +242,7 @@ CONTAINER ID        IMAGE               COMMAND             CREATED             
 
 ```bash
 $  docker ps -a -f name=mongo-db
+
 CONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS                     PORTS               NAMES
 62cd1c2771f7        mongo:3.0.15        "docker-entrypoint.s…"   24 minutes ago      Exited (0) 6 minutes ago                       mongo-db
 
@@ -253,5 +288,7 @@ Deleted: sha256:9de9645094fc6d80651fd4c4030bb4e2fa0208ef9275a6dce93b7a61d890c087
 Deleted: sha256:ff00d1c192a08697a1d0898c29182f2b97291f51daf50dcda83af06db87454d8
 Deleted: sha256:fa9dd9b7df41027d87adad6a84abbd0990378ce3b393b3a68011dd63b2a57027
 ```
+
+If you have difficulty removing a Docker image, you can rerun the `docker rmi` command by passing in the `--force` option.
 
 This concludes the first part of the lab. We will now get started with Dockerizing an existing three-tier application (client, web and DB).
