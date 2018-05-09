@@ -39,7 +39,7 @@ Docker version 17.12.0-ce, build c97c6d6
 
 ```
 
-# Lab 1
+# Lab 1: Getting Familiar with the Docker CLI
 
 ## Play with a few commands
 
@@ -292,3 +292,121 @@ Deleted: sha256:fa9dd9b7df41027d87adad6a84abbd0990378ce3b393b3a68011dd63b2a57027
 If you have difficulty removing a Docker image, you can rerun the `docker rmi` command by passing in the `--force` option.
 
 This concludes the first part of the lab. We will now get started with Dockerizing an existing three-tier application (client, web and DB).
+
+# Lab 2: Dockerize an existing application
+
+In this lab we're going to "Dockerize" an existing Angular 5 client, an ASP.NET Core project, and connect them all with an existing SQL Server Docker image/container.
+
+This lab assumes that you do not have the Angular CLI and .NET Core CLI installed. Do not install them. You won't need them at least locally. It is also assumed you have a Docker Cloud account. If you do not have one, **stop now** and [sign up for a free account](https://cloud.docker.com/) before proceeding.
+
+From the terminal, navigate to the project root of this repository and open it in Visual Studio Code. For example, in the demo below, the repository is located under the `~/repos` directory
+
+```bash
+$ cd ~/repos/csg-docker-lab
+
+$ pwd
+/home/your-user-name/repos/csg-docker-lab
+
+$ code .
+```
+
+Note the "." following the `code` command. This will open Visual Studio Code. Note that I didn't have to do this, as I composed this document using Visual Studio Code, so I'm skipping this step. :-)
+
+## Important Docker Commands
+
+In this lab you will be running several important Docker commands.
+
+### `docker login`
+
+Log in to Docker Cloud or to a private registry. This command exposes additional options for passing in a user name and password combination, and a private registry server name from the command line.
+
+### `docker build -t <docker-image-name> .`
+
+Build current directory's Dockerfile (implied by the "`.`") using target name `<docker-image-name>`.
+
+### `docker run -d -p <host-port>:<container-port> --name <container-name> <docker-image-name>`
+
+You've already encountered this command. The newest option is the `-p` (port) option, where we *expose* a port from the container to the host. The syntax `host:container` is called "mapping". It is widely used within Docker for mounting host directories, ports, etc. to the container.
+
+### `docker tag <docker-image-name> <docker-cloud-user-name>/<repository-name>:<version-or-tag>`
+
+Add a tag (label) to a local Docker image and associate it with the supplied remote repository at `<docker-cloud-user-name>/<repository-name>`
+
+### `docker push <docker-cloud-user-name>/<repository-name>:<version-or-tag>`
+
+Publish (push) the tagged Docker image to the specified remote `<repository-name>` using `<docker-cloud-user-name>` account.
+
+By default, Docker assumes you're publishing to Docker Cloud. If publishing to a private repository, such as [Azure Container Registry](https://azure.microsoft.com/en-us/services/container-registry/) or even [Artifactory](https://jfrog.com/artifactory/), you would prefix the destination with the registry's base] URL. For example, to publish a SQL Server Linux 2017-CU4 image to ACR, assuming the registry name is called `csgdockertraining` on a repository called `lab1`, you would type:
+
+```bash
+$ docker login --username YOUR_ACR_USER --password YOUR_ACR_PASSWORD csgdockertraining.azurecr.io
+
+$ docker push csgdockertraining.azurecr.io/lab1/mssql-server-linux:2017-CU4
+
+```
+
+## Run SQL Server for Linux
+
+We will use the official [SQL Server for Linux](https://hub.docker.com/r/microsoft/mssql-server-linux/s) Developer Edition 2017-CU6 Docker image for this demo.
+
+Replace the `yourStrongPassword` placeholder with a custom password. Please jot down the password you decide to use, as you will need it in later steps.
+
+**Important**: When creating a SQL Server password, do not use "`!`" or "`$`", as these have special meaning in Linux.
+
+The back slash "`\`" can be ignored or typed in, as this tells Bash that the command continues on the next line when you hit the Enter/Return key.
+
+Also important to note is the `--name` we're supplying. This will become crucial when writing the database connection to be used by the ASP.NET Core application later. We're using `csglab-mssql` to represent MS SQL's container name in this lab.
+
+```bash
+$ docker run \
+   -e 'ACCEPT_EULA=Y' \
+   -e 'SA_PASSWORD=yourStrongPassword' \
+   -p 1433:1433 -d \
+   --name csglab-mssql \
+   microsoft/mssql-server-linux:2017-CU6
+
+Unable to find image 'microsoft/mssql-server-linux:2017-CU6' locally
+2017-CU6: Pulling from microsoft/mssql-server-linux
+f6fa9a861b90: Already exists 
+da7318603015: Already exists 
+6a8bd10c9278: Already exists 
+d5a40291440f: Already exists 
+bbdd8a83c0f1: Already exists 
+3a52205d40a6: Already exists 
+6192691706e8: Already exists 
+1a658a9035fb: Already exists 
+d057e89d8e94: Pull complete 
+1ed0a0d4098f: Pull complete 
+Digest: sha256:30ff80f9765b3c813af6b4ed71355dd4abb8afc966226fc80c12a8ff1b2c4ef8
+Status: Downloaded newer image for microsoft/mssql-server-linux:2017-CU6
+48f877fc6113dfe6d64224bfeec536ad10765383c2342d0787988347138b4827
+```
+
+Let's try connecting to SQL Server now.
+
+```bash
+$ docker exec -it csglab-mssql /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P yourStrongPassword
+
+1> <cursor-here>
+```
+
+Now let's type in a simple SQL Command:
+
+```sqlcmd
+1> SELECT Name FROM sys.Databases
+2> GO
+Name
+--------------------
+master
+tempdb
+model
+msdb
+
+(4 rows affected)
+1>
+```
+
+Press `Ctrl + C` or enter `exit` to exit the SQLCMD interface.
+
+For additional details on the MS SQL Server for Linux image, [visit the official repository](https://hub.docker.com/r/microsoft/mssql-server-linux/).
+
