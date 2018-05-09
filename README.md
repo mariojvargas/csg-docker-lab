@@ -612,3 +612,87 @@ $ curl http://localhost:8000/api/manufacturers
 
 Congratulations! ASP.NET Core is now communicating with SQL Server in Docker!
 
+## Dockerize Client Application
+
+Our final step is to build and deploy our Angular client application within Docker. This will be performed in Stages as follows:
+
+* **Stage 1:** Build and compile Angular application
+* **Stage 2:** Serve the application via Nginx
+
+In the final stage, we will end up with a very small Docker image that only contains the distributable, minimized version of our Angular app.
+
+[Nginx](https://www.nginx.com/) is a popular platform that offers load balancing solutions, ingress controllers, and of course, web server capabilities.
+
+### Environment files
+
+The Angular CLI allows us to target either a `development` or `prod` (Production) environment. We can create configurations for our application by modifying the `environment.ts` and `environment.prod.ts` files. The base API path has already been configured for you. Notice that they all point to http://localhost:8000/api, which is the same host and port we used for Dockerizing the ASP.NET Core application.
+
+You can find these two files under the `csg-docker-lab/src/client/src/environments` directory.
+
+### Create Dockerfile for Client Application
+
+In Visual Studio Code, create a new file called `Dockerfile` under the `csg-docker-lab/src/client` directory.
+
+Add the following contents to that Dockerfile. Note that in the second stage, the `nginx-custom.conf` configuration file is copied over to the Docker container. That file is located at the root of the `client` directory and it was created for your convenience.
+
+Observe also that we have the ability to pass in a custom `ARG` (argument) named `TARGET_ENV`. This gives us the ability to build different versions of this Dockerfile for different environments, such as Dev or Prod. You can accomplish that by using the `--build-arg TARGET_ENV=prod` or `--build-arg TARGET_ENV=development` along with the `docker build` command. We won't be doing that in this exercise.
+
+```Dockerfile
+# Stage 1: Build and compile Angular application
+FROM node:10.0.0 as node
+
+RUN mkdir -p /app
+
+WORKDIR /app
+
+COPY package.json .
+
+RUN npm install
+
+COPY . .
+
+ARG TARGET_ENV=prod
+
+RUN npm run build -- --prod --environment $TARGET_ENV
+
+# Stage 2: Serve app via Nginx
+FROM nginx:1.13
+
+COPY --from=node /app/dist/ /usr/share/nginx/html
+COPY ./nginx-custom.conf /etc/nginx/conf.d/default.conf
+```
+
+Save the Dockerfile.
+
+### Build the client application's Dockerfile
+
+This process is very similar as before, so the syntax should be very familiar. We'll use `csglab-client` as our image name.
+
+```bash
+$ cd ~/repos/csg-docker-lab/src/client
+
+$ docker build -t csglab-client .
+```
+
+### Run the client application's Docker image
+
+If you inspected the `nginx-custom.conf`, you will find that Nginx exposes port 80. This is the port we'll expose from our container and the host. If port 80 happens to be used by something else on your machine, change the host port to a different number, such as 5000. Remember the mapping syntax `host:container`.
+
+```bash
+$ docker run -d -p 80:80 --network csglab --name csglab-client csglab-client
+```
+
+Open the URL [http://localhost:80/](http://localhost:80/) in a Web browser. You should see the sample app is now pulling data from the ASP.NET Core application and subsequently from SQL Server.
+
+If you run `docker ps`, you should now see three containers running.
+
+```bash
+$ docker ps
+
+CONTAINER ID        IMAGE                                   COMMAND                  CREATED             STATUS              PORTS                              NAMES
+c004aaa68331        csglab-client                           "nginx -g 'daemon of…"   4 minutes ago       Up 4 minutes        0.0.0.0:80->80/tcp                 csglab-client
+627550b78481        csglab-web                              "dotnet run --launch…"   About an hour ago   Up 4 seconds        0.0.0.0:8000->8000/tcp, 8080/tcp   csglab-web
+2bca7ee4391b        microsoft/mssql-server-linux:2017-CU6   "/opt/mssql/bin/sqls…"   About an hour ago   Up 14 seconds       0.0.0.0:1433->1433/tcp             csglab-mssql
+```
+
+This concludes the lab. Congratulations!
