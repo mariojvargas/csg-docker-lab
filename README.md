@@ -380,7 +380,7 @@ Also important to note is the `--name` we're supplying and the fact we're associ
 $ docker run \
    -e 'ACCEPT_EULA=Y' \
    -e 'SA_PASSWORD=yourStrongPassword' \
-   --network csglab
+   --network csglab \
    -p 1433:1433 -d \
    --name csglab-mssql \
    microsoft/mssql-server-linux:2017-CU6
